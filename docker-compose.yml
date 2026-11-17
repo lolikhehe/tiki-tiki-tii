@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: videobot
+      POSTGRES_PASSWORD: videobot
+      POSTGRES_DB: videobot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U videobot -d videobot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  bot:
+    build: .
+    image: tiki-tiki-tii:latest
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://videobot:videobot@postgres:5432/videobot
+      DOWNLOAD_DIR: /data/downloads
+      # The local Bot API server shares /data/downloads at the same path.
+      TELEGRAM_API_URL: ${TELEGRAM_API_URL:-}
+      METRICS_ADDR: 0.0.0.0:9090
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN is required in .env}
+      STORAGE_CHAT_ID: ${STORAGE_CHAT_ID:-}
+      ENABLED_SOURCES: ${ENABLED_SOURCES:-all}
+      ADMIN_IDS: ${ADMIN_IDS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - downloads:/data/downloads
+    ports:
+      - "9090:9090"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 4g
+    pids_limit: 512
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9090/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # Local Bot API server: raises the upload limit from 50 MB to ~2 GB and
+  # accepts local file paths. Needs api_id/api_hash from my.telegram.org.
+  # Requires a one-time logOut from the cloud API (see README).
+  bot-api:
+    profiles: ["local"]
+    image: aiogram/telegram-bot-api:latest
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
+      TELEGRAM_LOCAL: "1"
+      TELEGRAM_HTTP_PORT: "8081"
+    volumes:
+      - downloads:/data/downloads
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  downloads:
