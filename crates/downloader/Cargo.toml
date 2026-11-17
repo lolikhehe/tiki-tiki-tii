@@ -1,0 +1,20 @@
+[package]
+name = "downloader"
+description = "yt-dlp wrapper and deduplicating download manager"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+common.workspace = true
+media.workspace = true
+metrics.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sources.workspace = true
+storage.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true

@@ -1,0 +1,67 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+description = "Telegram video downloader bot on Rust (teloxide + yt-dlp + ffmpeg)"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+anyhow = "1"
+async-trait = "0.1"
+chrono = { version = "0.4", default-features = false, features = ["serde"] }
+dotenvy = "0.15"
+metrics = "0.24"
+metrics-exporter-prometheus = "0.18"
+mimalloc = "0.1"
+moka = { version = "0.12", features = ["future"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "json",
+    "charset",
+    "http2",
+    "gzip",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.9", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+    "macros",
+    "migrate",
+    "chrono",
+    "uuid",
+    "json",
+] }
+teloxide = { version = "0.17", default-features = false, features = [
+    "macros",
+    "rustls",
+    "throttle",
+    "tracing",
+    "webhooks-axum",
+] }
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+
+common = { path = "crates/common" }
+sources = { path = "crates/sources" }
+downloader = { path = "crates/downloader" }
+media = { path = "crates/media" }
+storage = { path = "crates/storage" }
+telegram = { path = "crates/telegram" }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "unwind"
