@@ -1,0 +1,22 @@
+[package]
+name = "telegram"
+description = "Telegram handlers, inline mode, job worker and message rendering"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+common.workspace = true
+downloader.workspace = true
+metrics.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sources.workspace = true
+storage.workspace = true
+teloxide.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+uuid.workspace = true

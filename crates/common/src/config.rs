@@ -3,7 +3,7 @@
 //! never written to logs.
 
 use crate::domain::{Lang, SourceKind};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::path::PathBuf;

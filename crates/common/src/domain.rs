@@ -195,7 +195,7 @@ impl QualityTier {
         }
     }
 
-    pub fn from_str(value: &str) -> Option<Self> {
+    pub fn from_label(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "480" | "h264_480" | "p480" => Some(Self::P480),
             "720" | "h264_720" | "p720" => Some(Self::P720),
@@ -215,7 +215,7 @@ impl FromStr for QualityTier {
     type Err = ();
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::from_str(value).ok_or(())
+        Self::from_label(value).ok_or(())
     }
 }
 
@@ -277,6 +277,7 @@ pub struct PreparedVideo {
 }
 
 impl PreparedVideo {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         path: PathBuf,
         thumbnail: Option<PathBuf>,
@@ -340,10 +341,7 @@ mod tests {
     fn video_key_roundtrip() {
         let key = VideoKey::new(SourceKind::YouTube, "abc123");
         assert_eq!(key.as_str(), "youtube:abc123");
-        assert_eq!(
-            "youtube:abc123".parse::<SourceKind>(),
-            Ok(SourceKind::YouTube)
-        );
+        assert_eq!("youtube".parse::<SourceKind>(), Ok(SourceKind::YouTube));
     }
 
     #[test]

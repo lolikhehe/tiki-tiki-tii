@@ -164,10 +164,9 @@ mod tests {
 
     #[test]
     fn rotation_detection_from_side_data() {
-        let json: Value = serde_json::from_str(
-            r#"{"side_data_list":[{"rotation":-90},{"rotation":0}]}"#,
-        )
-        .expect("json");
+        let json: Value =
+            serde_json::from_str(r#"{"side_data_list":[{"rotation":-90},{"rotation":0}]}"#)
+                .expect("json");
         assert_eq!(read_rotation(&json), -90);
     }
 

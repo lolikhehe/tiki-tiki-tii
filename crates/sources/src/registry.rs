@@ -80,8 +80,8 @@ impl Source for BuiltinSource {
         let Some(template) = self.oembed else {
             return Ok(meta);
         };
-        let encoded: String = url::form_urlencoded::byte_serialize(parsed.page_url.as_str().as_bytes())
-            .collect();
+        let encoded: String =
+            url::form_urlencoded::byte_serialize(parsed.page_url.as_str().as_bytes()).collect();
         let endpoint = template.replace("{url}", &encoded);
 
         let response = tokio::time::timeout(timeout, client.get(&endpoint).send())
@@ -194,13 +194,17 @@ impl SourceRegistry {
     pub async fn resolve(&self, url: Url) -> Result<Url, SourceError> {
         let mut current = url;
         for _ in 0..3 {
-            let needs_resolve = self.parse_raw(&current).is_some_and(|parsed| parsed.needs_resolve);
+            let needs_resolve = self
+                .parse_raw(&current)
+                .is_some_and(|parsed| parsed.needs_resolve);
             if !needs_resolve {
                 return Ok(current);
             }
             // Only known short-link hosts may be followed.
             let host = host_without_www(&current);
-            if !(host.ends_with("tiktok.com") && (host.starts_with("vm.") || host.starts_with("vt."))) {
+            if !(host.ends_with("tiktok.com")
+                && (host.starts_with("vm.") || host.starts_with("vt.")))
+            {
                 return Err(SourceError::ResolveFailed);
             }
             let client = reqwest::Client::builder()
@@ -209,17 +213,20 @@ impl SourceRegistry {
                 .user_agent(crate::http::USER_AGENT)
                 .build()
                 .map_err(|error| SourceError::Network(error.to_string()))?;
-            let response = tokio::time::timeout(self.resolve_timeout, client.get(current.clone()).send())
-                .await
-                .map_err(|_| SourceError::Network("redirect timed out".into()))?
-                .map_err(|error| SourceError::Network(error.to_string()))?;
+            let response =
+                tokio::time::timeout(self.resolve_timeout, client.get(current.clone()).send())
+                    .await
+                    .map_err(|_| SourceError::Network("redirect timed out".into()))?
+                    .map_err(|error| SourceError::Network(error.to_string()))?;
             current = response.url().clone();
             if current.scheme() != "https" {
                 return Err(SourceError::ResolveFailed);
             }
             let final_host = host_without_www(&current);
             let recognized = self.sources.iter().any(|source| match source.kind() {
-                SourceKind::YouTube => final_host.ends_with("youtube.com") || final_host == "youtu.be",
+                SourceKind::YouTube => {
+                    final_host.ends_with("youtube.com") || final_host == "youtu.be"
+                }
                 SourceKind::TikTok => final_host.ends_with("tiktok.com"),
                 SourceKind::Instagram => final_host.ends_with("instagram.com"),
                 SourceKind::X => final_host == "x.com" || final_host.ends_with("twitter.com"),
@@ -304,7 +311,9 @@ fn parse_youtube(url: &Url) -> Option<ParsedUrl> {
                 .map(|(_, value)| value.into_owned())?;
             make(SourceKind::YouTube, &id, url, false)
         }
-        "shorts" | "embed" | "live" => make(SourceKind::YouTube, parts.get(1).copied()?, url, false),
+        "shorts" | "embed" | "live" => {
+            make(SourceKind::YouTube, parts.get(1).copied()?, url, false)
+        }
         "playlist" => {
             let list = url
                 .query_pairs()
@@ -339,8 +348,15 @@ fn parse_tiktok(url: &Url) -> Option<ParsedUrl> {
             needs_resolve: true,
         });
     }
-    let index = parts.iter().position(|part| *part == "video" || *part == "reel")?;
-    make(SourceKind::TikTok, parts.get(index + 1).copied()?, url, false)
+    let index = parts
+        .iter()
+        .position(|part| *part == "video" || *part == "reel")?;
+    make(
+        SourceKind::TikTok,
+        parts.get(index + 1).copied()?,
+        url,
+        false,
+    )
 }
 
 fn parse_instagram(url: &Url) -> Option<ParsedUrl> {
@@ -352,7 +368,12 @@ fn parse_instagram(url: &Url) -> Option<ParsedUrl> {
     let index = parts
         .iter()
         .position(|part| matches!(*part, "reel" | "reels" | "p" | "tv"))?;
-    make(SourceKind::Instagram, parts.get(index + 1).copied()?, url, false)
+    make(
+        SourceKind::Instagram,
+        parts.get(index + 1).copied()?,
+        url,
+        false,
+    )
 }
 
 fn parse_x(url: &Url) -> Option<ParsedUrl> {
@@ -401,7 +422,7 @@ fn parse_vimeo(url: &Url) -> Option<ParsedUrl> {
 mod tests {
     use super::*;
 
-    fn parse(url: &str) -> Option<ParsedUrl> {
+    fn parse(url: &str) -> Result<ParsedUrl, ()> {
         let parsed = Url::parse(url).expect("valid url");
         parse_youtube(&parsed)
             .or_else(|| parse_tiktok(&parsed))
@@ -409,20 +430,22 @@ mod tests {
             .or_else(|| parse_x(&parsed))
             .or_else(|| parse_reddit(&parsed))
             .or_else(|| parse_vimeo(&parsed))
+            .ok_or(())
     }
 
     #[test]
-    fn youtube_variants() {
+    fn youtube_variants() -> Result<(), ()> {
+        assert_eq!(parse("https://youtu.be/abc123XYZ_-")?.key.id, "abc123XYZ_-");
         assert_eq!(
-            parse("https://youtu.be/abc123XYZ_-")?.key.id,
-            "abc123XYZ_-"
-        );
-        assert_eq!(
-            parse("https://www.youtube.com/watch?v=abcd1234&t=30")?.key.id,
+            parse("https://www.youtube.com/watch?v=abcd1234&t=30")?
+                .key
+                .id,
             "abcd1234"
         );
         assert_eq!(
-            parse("https://youtube.com/shorts/short_id_1?feature=share")?.key.id,
+            parse("https://youtube.com/shorts/short_id_1?feature=share")?
+                .key
+                .id,
             "short_id_1"
         );
         assert_eq!(
@@ -435,32 +458,37 @@ mod tests {
     }
 
     #[test]
-    fn other_sources() {
+    fn other_sources() -> Result<(), ()> {
         assert_eq!(
-            parse("https://www.tiktok.com/@user/video/7345678901234567890")?.key.source,
+            parse("https://www.tiktok.com/@user/video/7345678901234567890")?
+                .key
+                .source,
             SourceKind::TikTok
         );
         assert_eq!(
-            parse("https://www.instagram.com/reel/Cxyz123ABC/")?.key.source,
+            parse("https://www.instagram.com/reel/Cxyz123ABC/")?
+                .key
+                .source,
             SourceKind::Instagram
         );
         assert_eq!(
-            parse("https://x.com/user/status/1678901234567890123")?.key.source,
+            parse("https://x.com/user/status/1678901234567890123")?
+                .key
+                .source,
             SourceKind::X
         );
         assert_eq!(
-            parse("https://www.reddit.com/r/funny/comments/abc123/some_title/")?.key.id,
+            parse("https://www.reddit.com/r/funny/comments/abc123/some_title/")?
+                .key
+                .id,
             "abc123"
         );
-        assert_eq!(
-            parse("https://vimeo.com/123456789")?.key.id,
-            "123456789"
-        );
+        assert_eq!(parse("https://vimeo.com/123456789")?.key.id, "123456789");
         Ok::<(), ()>(())
     }
 
     #[test]
-    fn short_links_need_resolution() {
+    fn short_links_need_resolution() -> Result<(), ()> {
         let parsed = parse("https://vm.tiktok.com/ZMabc123/")?;
         assert!(parsed.needs_resolve);
         assert_eq!(parsed.key.source, SourceKind::TikTok);
@@ -469,7 +497,7 @@ mod tests {
 
     #[test]
     fn rejects_garbage() {
-        assert!(parse("https://example.com/watch?v=abcd1234").is_none());
-        assert!(parse("https://www.youtube.com/").is_none());
+        assert!(parse("https://example.com/watch?v=abcd1234").is_err());
+        assert!(parse("https://www.youtube.com/").is_err());
     }
 }

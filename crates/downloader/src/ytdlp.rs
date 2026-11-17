@@ -127,7 +127,11 @@ impl YtDlp {
         find_video(dir).await
     }
 
-    async fn run(&self, args: &[&str], timeout: Duration) -> Result<std::process::Output, DownloadError> {
+    async fn run(
+        &self,
+        args: &[&str],
+        timeout: Duration,
+    ) -> Result<std::process::Output, DownloadError> {
         debug!(binary = %self.binary, ?args, "running yt-dlp");
         let mut command = Command::new(&self.binary);
         command
@@ -139,7 +143,9 @@ impl YtDlp {
         tokio::time::timeout(timeout, command.output())
             .await
             .map_err(|_| DownloadError::Timeout)?
-            .map_err(|error| DownloadError::SourceUnavailable(format!("cannot start yt-dlp: {error}")))
+            .map_err(|error| {
+                DownloadError::SourceUnavailable(format!("cannot start yt-dlp: {error}"))
+            })
     }
 }
 
@@ -176,12 +182,15 @@ fn meta_from(info: Info, key: &VideoKey, fallback_url: &str) -> VideoMeta {
 }
 
 fn last_line(stdout: &[u8]) -> Option<String> {
-    String::from_utf8_lossy(stdout)
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .last()
-        .map(ToOwned::to_owned)
+    let text = String::from_utf8_lossy(stdout);
+    let mut last = None;
+    for line in text.lines() {
+        let line = line.trim();
+        if !line.is_empty() {
+            last = Some(line.to_owned());
+        }
+    }
+    last
 }
 
 async fn find_video(dir: &Path) -> Result<PathBuf, DownloadError> {
@@ -194,16 +203,20 @@ async fn find_video(dir: &Path) -> Result<PathBuf, DownloadError> {
                 .extension()
                 .and_then(|extension| extension.to_str())
                 .is_some_and(|extension| {
-                    matches!(extension.to_ascii_lowercase().as_str(), "mp4" | "webm" | "mkv" | "mov")
+                    matches!(
+                        extension.to_ascii_lowercase().as_str(),
+                        "mp4" | "webm" | "mkv" | "mov"
+                    )
                 })
         {
             found.push(path);
         }
     }
     found.sort();
-    found.into_iter().next().ok_or_else(|| {
-        DownloadError::SourceUnavailable("yt-dlp produced no video file".into())
-    })
+    found
+        .into_iter()
+        .next()
+        .ok_or_else(|| DownloadError::SourceUnavailable("yt-dlp produced no video file".into()))
 }
 
 /// Map yt-dlp stderr patterns onto friendly error variants. Keep all patterns

@@ -1,0 +1,23 @@
+[package]
+name = "app"
+description = "Entry point, health/metrics server and process lifecycle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+common.workspace = true
+dotenvy.workspace = true
+downloader.workspace = true
+metrics-exporter-prometheus.workspace = true
+mimalloc.workspace = true
+reqwest.workspace = true
+sources.workspace = true
+storage.workspace = true
+telegram.workspace = true
+teloxide.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

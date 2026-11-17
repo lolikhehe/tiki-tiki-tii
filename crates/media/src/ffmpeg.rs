@@ -53,9 +53,7 @@ pub async fn remux_faststart(
     ];
     let output_result = run(args, config).await?;
     if !output_result.status.success() {
-        return Err(DownloadError::Media(
-            "faststart remux failed".into(),
-        ));
+        return Err(DownloadError::Media("faststart remux failed".into()));
     }
     Ok(())
 }
@@ -103,11 +101,7 @@ pub async fn transcode(
 
 /// Generate a small JPEG thumbnail (<200 KB, sides <= 320 px). The encoder
 /// quality is lowered until the image fits Telegram's thumbnail budget.
-pub async fn thumbnail(
-    input: &Path,
-    output: &Path,
-    config: &Config,
-) -> Result<(), DownloadError> {
+pub async fn thumbnail(input: &Path, output: &Path, config: &Config) -> Result<(), DownloadError> {
     const MAX_BYTES: u64 = 200_000;
     for quality in [4u8, 6, 8, 10, 13, 16] {
         let args = vec![

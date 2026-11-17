@@ -34,12 +34,7 @@ pub struct DownloadManager {
 }
 
 impl DownloadManager {
-    pub fn new(
-        config: Arc<Config>,
-        registry: Arc<SourceRegistry>,
-        db: Db,
-        ytdlp: YtDlp,
-    ) -> Self {
+    pub fn new(config: Arc<Config>, registry: Arc<SourceRegistry>, db: Db, ytdlp: YtDlp) -> Self {
         let transcode_permits = config.max_concurrent_transcodes;
         let disk_permits = config.disk_budget_bytes.div_ceil(50_000_000).max(1) as usize;
         Self {
@@ -63,9 +58,10 @@ impl DownloadManager {
         key: &VideoKey,
         quality: QualityTier,
     ) -> Result<Option<CachedVideo>, DownloadError> {
-        self.db.get_video(key, quality).await.map_err(|error| {
-            DownloadError::Internal(format!("cache lookup failed: {error}"))
-        })
+        self.db
+            .get_video(key, quality)
+            .await
+            .map_err(|error| DownloadError::Internal(format!("cache lookup failed: {error}")))
     }
 
     pub async fn touch_cached(&self, key: &VideoKey, quality: QualityTier) {
@@ -73,9 +69,10 @@ impl DownloadManager {
     }
 
     pub async fn purge(&self, key: &VideoKey) -> Result<bool, DownloadError> {
-        self.db.purge_video(key).await.map_err(|error| {
-            DownloadError::Internal(format!("cache purge failed: {error}"))
-        })
+        self.db
+            .purge_video(key)
+            .await
+            .map_err(|error| DownloadError::Internal(format!("cache purge failed: {error}")))
     }
 
     /// Record the Telegram `file_id` returned after a successful upload.
@@ -96,9 +93,10 @@ impl DownloadManager {
             duration_sec: prepared.duration_sec,
             size_bytes: prepared.size_bytes,
         };
-        self.db.put_video(&cached).await.map_err(|error| {
-            DownloadError::Internal(format!("cache write failed: {error}"))
-        })
+        self.db
+            .put_video(&cached)
+            .await
+            .map_err(|error| DownloadError::Internal(format!("cache write failed: {error}")))
     }
 
     /// Download once per (video, quality), even if many requests arrive at
@@ -166,7 +164,9 @@ impl DownloadManager {
         metrics::histogram!("video_bot_download_seconds").record(started.elapsed().as_secs_f64());
         match &result {
             Ok(_) => metrics::counter!("video_bot_downloads_total", "result" => "ok").increment(1),
-            Err(_) => metrics::counter!("video_bot_downloads_total", "result" => "error").increment(1),
+            Err(_) => {
+                metrics::counter!("video_bot_downloads_total", "result" => "error").increment(1)
+            }
         }
         result
     }
@@ -200,7 +200,12 @@ impl DownloadManager {
         let downloaded = loop {
             match self
                 .ytdlp
-                .download(&request.url, effective, dir.path(), self.config.max_file_bytes())
+                .download(
+                    &request.url,
+                    effective,
+                    dir.path(),
+                    self.config.max_file_bytes(),
+                )
                 .await
             {
                 Ok(path) => break path,

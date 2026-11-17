@@ -6,9 +6,7 @@
 //! `docs/decisions.md` for the rationale (deviation from ТЗ §5.1).
 
 use chrono::{Duration as ChronoDuration, Utc};
-use common::domain::{
-    CachedVideo, Lang, QualityTier, SourceKind, Stats, UserRecord, VideoKey,
-};
+use common::domain::{CachedVideo, Lang, QualityTier, SourceKind, Stats, UserRecord, VideoKey};
 use common::error::{AppError, AppResult};
 use moka::future::Cache;
 use serde_json::Value;
@@ -16,6 +14,9 @@ use sqlx::PgPool;
 use std::time::Duration;
 use tracing::warn;
 use uuid::Uuid;
+
+type VideoRow = (String, String, String, i32, i32, i32, i64, String);
+type WaiterRow = (i64, i64, Option<i64>, Option<i32>, Option<String>, String);
 
 #[derive(Debug, Clone)]
 pub struct Job {
@@ -96,16 +97,7 @@ impl Db {
             return Ok(Some(cached));
         }
 
-        let row: Option<(
-            String,
-            String,
-            String,
-            i32,
-            i32,
-            i32,
-            i64,
-            String,
-        )> = sqlx::query_as(
+        let row: Option<VideoRow> = sqlx::query_as(
             "SELECT file_id, file_unique_id, title, duration_sec, width, height, size_bytes, page_url
              FROM videos WHERE source = $1 AND source_id = $2 AND quality = $3",
         )
@@ -116,7 +108,16 @@ impl Db {
         .await
         .map_err(|error| AppError::Database(error.to_string()))?;
 
-        let Some((file_id, file_unique_id, title, duration_sec, width, height, size_bytes, page_url)) = row
+        let Some((
+            file_id,
+            file_unique_id,
+            title,
+            duration_sec,
+            width,
+            height,
+            size_bytes,
+            page_url,
+        )) = row
         else {
             return Ok(None);
         };
@@ -237,13 +238,12 @@ impl Db {
     // ----- users ------------------------------------------------------------
 
     pub async fn get_user(&self, tg_id: i64) -> AppResult<Option<UserRecord>> {
-        let row: Option<(String, i32, bool)> = sqlx::query_as(
-            "SELECT lang, max_height, banned FROM users WHERE tg_id = $1",
-        )
-        .bind(tg_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|error| AppError::Database(error.to_string()))?;
+        let row: Option<(String, i32, bool)> =
+            sqlx::query_as("SELECT lang, max_height, banned FROM users WHERE tg_id = $1")
+                .bind(tg_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|error| AppError::Database(error.to_string()))?;
         Ok(row.map(|(lang, max_height, banned)| UserRecord {
             lang: Lang::from_code(&lang).unwrap_or(Lang::Uk),
             max_height: u32::try_from(max_height).unwrap_or(720),
@@ -308,14 +308,19 @@ impl Db {
             .fetch_one(&self.pool)
             .await
             .map_err(|error| AppError::Database(error.to_string()))?;
-        Ok(Stats { videos, users, sends })
+        Ok(Stats {
+            videos,
+            users,
+            sends,
+        })
     }
 
     // ----- selections -------------------------------------------------------
 
     pub async fn create_selection(&self, payload: Value, ttl: Duration) -> AppResult<String> {
         let id = Uuid::new_v4().simple().to_string();
-        let expires_at = Utc::now() + ChronoDuration::seconds(i64::try_from(ttl.as_secs()).unwrap_or(3600));
+        let expires_at =
+            Utc::now() + ChronoDuration::seconds(i64::try_from(ttl.as_secs()).unwrap_or(3600));
         sqlx::query("INSERT INTO selections (id, payload, expires_at) VALUES ($1, $2, $3)")
             .bind(&id)
             .bind(&payload)
@@ -418,7 +423,11 @@ impl Db {
     /// Atomically claim the oldest queued job. Safe across replicas thanks to
     /// `FOR UPDATE SKIP LOCKED`.
     pub async fn claim_job(&self) -> AppResult<Option<Job>> {
-        let mut tx = self.pool.begin().await.map_err(|e| AppError::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
         let row: Option<(Uuid, String, String, String, String)> = sqlx::query_as(
             "SELECT id, source, source_id, quality, url FROM jobs
              WHERE status = 'queued'
@@ -437,14 +446,16 @@ impl Db {
             .execute(&mut *tx)
             .await
             .map_err(|error| AppError::Database(error.to_string()))?;
-        tx.commit().await.map_err(|e| AppError::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
 
         let Ok(source_kind) = source.parse::<SourceKind>() else {
             warn!(%source, "unknown source in job; marking failed");
             self.fail_job(id, "unknown source").await?;
             return Ok(None);
         };
-        let Some(quality) = QualityTier::from_str(&quality) else {
+        let Some(quality) = QualityTier::from_label(&quality) else {
             self.fail_job(id, "unknown quality").await?;
             return Ok(None);
         };
@@ -466,12 +477,14 @@ impl Db {
     }
 
     pub async fn fail_job(&self, id: Uuid, error: &str) -> AppResult<()> {
-        sqlx::query("UPDATE jobs SET status = 'failed', error = $1, updated_at = now() WHERE id = $2")
-            .bind(common::i18n::truncate(error, 2000))
-            .bind(id)
-            .execute(&self.pool)
-            .await
-            .map_err(|error| AppError::Database(error.to_string()))?;
+        sqlx::query(
+            "UPDATE jobs SET status = 'failed', error = $1, updated_at = now() WHERE id = $2",
+        )
+        .bind(common::i18n::truncate(error, 2000))
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| AppError::Database(error.to_string()))?;
         Ok(())
     }
 
@@ -492,8 +505,7 @@ impl Db {
 
     /// Atomically take every undelivered waiter for a job exactly once.
     pub async fn take_waiters(&self, job_id: Uuid) -> AppResult<Vec<Waiter>> {
-        let rows: Vec<(i64, i64, Option<i64>, Option<i32>, Option<String>, String)> =
-            sqlx::query_as(
+        let rows: Vec<WaiterRow> = sqlx::query_as(
                 "UPDATE job_waiters SET delivered = true
                  WHERE id IN (SELECT id FROM job_waiters WHERE job_id = $1 AND delivered = false)
                  RETURNING id, user_tg_id, chat_id, placeholder_message_id, inline_message_id, lang",
@@ -504,14 +516,18 @@ impl Db {
             .map_err(|error| AppError::Database(error.to_string()))?;
         Ok(rows
             .into_iter()
-            .map(|(id, user_tg_id, chat_id, placeholder_message_id, inline_message_id, lang)| Waiter {
-                id,
-                user_tg_id,
-                chat_id,
-                placeholder_message_id,
-                inline_message_id,
-                lang: Lang::from_code(&lang).unwrap_or(Lang::Uk),
-            })
+            .map(
+                |(id, user_tg_id, chat_id, placeholder_message_id, inline_message_id, lang)| {
+                    Waiter {
+                        id,
+                        user_tg_id,
+                        chat_id,
+                        placeholder_message_id,
+                        inline_message_id,
+                        lang: Lang::from_code(&lang).unwrap_or(Lang::Uk),
+                    }
+                },
+            )
             .collect())
     }
 
