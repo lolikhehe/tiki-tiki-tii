@@ -1,0 +1,8 @@
+target/
+data/
+.git/
+.github/
+.env
+*.log
+tests/fixtures/*.mp4
+docker-build.log
