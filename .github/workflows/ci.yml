@@ -11,6 +11,22 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: videobot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d videobot"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/videobot
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -22,8 +38,15 @@ jobs:
         run: cargo fmt --all --check
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: test
+      - name: test (unit + Postgres integration)
         run: cargo test --workspace
+      - name: upload local load report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-local
+          path: target/perf-local.json
+          if-no-files-found: ignore
       - name: release build
         run: cargo build --workspace --release --locked
 

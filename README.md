@@ -36,16 +36,40 @@ crates/
 Dependency direction: `common` ← `sources`/`downloader`/`media`/`storage` ←
 `telegram` ← `app`.
 
+## Before the first run — env checklist
+
+The code is complete and verified; the only remaining step is **your** configuration.
+Do this before `docker compose up`:
+
+1. **Bot token** — create a bot with [@BotFather](https://t.me/BotFather) and put
+   the token into `.env` as `BOT_TOKEN=...`. The app also accepts the legacy
+   name `TELOXIDE_TOKEN`.
+2. **Inline mode** — send `/setinline` to BotFather (enable it) and
+   `/setinlinefeedback` → **100%**. Without feedback Telegram never sends
+   `chosen_inline_result`, so uncached inline videos will not be delivered.
+3. **Copy the template:** `cp .env.example .env`, then edit `.env`.
+4. **Required for inline uncached videos:** `STORAGE_CHAT_ID` — the numeric id
+   of a private channel/chat where the bot can write. Add the bot there first.
+5. **For videos > 50 MB (required by the spec):** get `api_id` and `api_hash`
+   from [my.telegram.org](https://my.telegram.org), set `TELEGRAM_API_ID`,
+   `TELEGRAM_API_HASH` and `TELEGRAM_API_URL=http://bot-api:8081`, then start
+   with `docker compose --profile local up -d`. Otherwise leave
+   `TELEGRAM_API_URL` empty to use the cloud API (49 MB cap).
+6. **Admins (optional):** `ADMIN_IDS=123456,789` for `/stats`, `/ban`,
+   `/unban`, `/purge`.
+
+`DATABASE_URL` is already set inside `docker-compose.yml`, so you do not need
+to configure Postgres manually. All other variables have sane defaults from
+the spec.
+
 ## Quick start
 
-1. Create a bot with [@BotFather](https://t.me/BotFather), copy the token.
-2. Enable inline mode (`/setinline`) and inline feedback (`/setinlinefeedback`,
-   choose 100%). Without feedback, `chosen_inline_result` never arrives.
-3. Copy `.env.example` to `.env` and set at least `BOT_TOKEN`.
-4. Run:
+After completing the checklist above:
 
 ```bash
-docker compose up -d
+docker compose up -d          # cloud Bot API
+# or, for >50 MB files:
+docker compose --profile local up -d
 ```
 
 This starts Postgres and the bot. The cloud Bot API is used unless

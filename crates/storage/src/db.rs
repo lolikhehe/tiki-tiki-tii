@@ -304,7 +304,7 @@ impl Db {
             .fetch_one(&self.pool)
             .await
             .map_err(|error| AppError::Database(error.to_string()))?;
-        let sends: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(hits), 0) FROM videos")
+        let sends: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(hits), 0)::bigint FROM videos")
             .fetch_one(&self.pool)
             .await
             .map_err(|error| AppError::Database(error.to_string()))?;
